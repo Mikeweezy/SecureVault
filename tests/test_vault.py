@@ -1,32 +1,31 @@
 from __future__ import annotations
 
-from securevault.vault import SecureVault
+from securevault.vault import VaultStorage
 
 
 def test_vault_round_trip(tmp_path):
     vault_path = tmp_path / "vault.json"
-    vault = SecureVault(password="super-secret-password", vault_file=vault_path)
+    storage = VaultStorage(vault_path)
 
-    vault.init()
-    vault.add("github", "ghp_example", note="Personal access token")
+    storage.initialize("super-secret-password")
+    storage.add_entry("super-secret-password", "github", "ghp_example", "Personal access token")
 
-    fetched = vault.get("github")
+    fetched = storage.get_entry("super-secret-password", "github")
     assert fetched["value"] == "ghp_example"
     assert fetched["note"] == "Personal access token"
 
-    entries = vault.list()
+    entries = storage.list_entries("super-secret-password")
     assert [item["name"] for item in entries] == ["github"]
 
 
 def test_wrong_password_raises(tmp_path):
     vault_path = tmp_path / "vault.json"
-    vault = SecureVault(password="correct-password", vault_file=vault_path)
-    vault.init()
-    vault.add("db", "db-pass")
+    storage = VaultStorage(vault_path)
+    storage.initialize("correct-password")
+    storage.add_entry("correct-password", "db", "db-pass")
 
-    wrong = SecureVault(password="wrong-password", vault_file=vault_path)
     try:
-        wrong.get("db")
+        storage.get_entry("wrong-password", "db")
         assert False, "Expected ValueError for wrong password"
     except Exception:
         pass
@@ -34,9 +33,9 @@ def test_wrong_password_raises(tmp_path):
 
 def test_delete_entry(tmp_path):
     vault_path = tmp_path / "vault.json"
-    vault = SecureVault(password="pw", vault_file=vault_path)
-    vault.init()
-    vault.add("api", "secret")
-    vault.delete("api")
+    storage = VaultStorage(vault_path)
+    storage.initialize("pw")
+    storage.add_entry("pw", "api", "secret")
+    storage.delete_entry("api")
 
-    assert vault.list() == []
+    assert storage.list_entries("pw") == []
