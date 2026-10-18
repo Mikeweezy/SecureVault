@@ -7,8 +7,8 @@ SecureVault is a Python-based secure vault application for storing sensitive inf
 - Password-protected vault initialization
 - Encrypted secret storage using PBKDF2 + Fernet
 - Add, retrieve, list, and delete secrets
-- JSON-based local storage for quick offline use
-- Simple CLI workflow for local use
+- JSON-backed local storage for quick offline use
+- Simple CLI workflow
 
 ## Tech stack
 
