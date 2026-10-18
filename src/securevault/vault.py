@@ -17,6 +17,7 @@ class VaultStorage:
         return self.vault_file.exists()
 
     def initialize(self, password: str) -> dict[str, Any]:
+        _ = password
         salt = generate_salt()
         vault = {
             "salt": salt.decode("utf-8"),
@@ -34,6 +35,7 @@ class VaultStorage:
 
         if "salt" not in data or "entries" not in data:
             raise ValueError("Vault file is malformed.")
+
         return data
 
     def save(self, vault: dict[str, Any]) -> None:
@@ -70,16 +72,21 @@ class VaultStorage:
     def list_entries(self, password: str) -> list[dict[str, Any]]:
         vault = self.load()
         salt = vault["salt"].encode("utf-8")
-        names = sorted(vault["entries"].keys())
         items: list[dict[str, Any]] = []
 
-        for name in names:
+        for name in sorted(vault["entries"].keys()):
             entry = vault["entries"][name]
             try:
                 value = decrypt_secret(entry["value"], password, salt)
-            except Exception as exc:  # pragma: no cover - relies on wrong credentials
+            except Exception as exc:
                 raise ValueError("Incorrect password or corrupted vault.") from exc
-            items.append({"name": name, "value": value, "note": entry.get("note", "")})
+
+            items.append({
+                "name": name,
+                "value": value,
+                "note": entry.get("note", ""),
+            })
+
         return items
 
     def delete_entry(self, name: str) -> dict[str, Any]:
