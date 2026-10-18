@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import base64
 import hashlib
-from typing import Any
+import os
 
 from cryptography.fernet import Fernet
 
@@ -35,4 +35,5 @@ def decrypt_secret(value: str, password: str, salt: bytes) -> str:
 
 def generate_salt() -> bytes:
     """Create a secure random salt for password-based key derivation."""
-    return base64.urlsafe_b64encode(hashlib.sha256(b"securevault-salt").digest()[:16])
+    raw = os.urandom(16)
+    return base64.urlsafe_b64encode(raw)
