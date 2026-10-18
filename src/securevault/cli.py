@@ -1,84 +1,69 @@
 from __future__ import annotations
 
-from pathlib import Path
+import argparse
+import sys
 
-from securevault.crypto import decrypt_secret, encrypt_secret, generate_salt
+from securevault.vault import VaultStorage
 
 
-class SecureVault:
-    """High-level interface for working with a password-protected vault."""
+def build_parser() -> argparse.ArgumentParser:
+    parser = argparse.ArgumentParser(description="SecureVault CLI")
+    parser.add_argument("command", choices=["init", "add", "get", "list", "delete"])
+    parser.add_argument("--password", required=True, help="Master password for vault access")
+    parser.add_argument("--vault-file", default="vault.json", help="Path to the vault JSON file")
+    parser.add_argument("--name", help="Secret name")
+    parser.add_argument("--secret", help="Plaintext secret")
+    parser.add_argument("--note", default="", help="Optional note for the secret")
+    return parser
 
-    def __init__(self, password: str, vault_file: str | Path = "vault.json"):
-        self.password = password
-        self.vault_file = Path(vault_file)
 
-    def _ensure_initialized(self) -> dict:
-        if not self.vault_file.exists():
-            raise FileNotFoundError(f"Vault file not found: {self.vault_file}")
-        import json
+def main() -> int:
+    parser = build_parser()
+    args = parser.parse_args()
+    storage = VaultStorage(args.vault_file)
 
-        with self.vault_file.open("r", encoding="utf-8") as handle:
-            data = json.load(handle)
-        if "salt" not in data or "entries" not in data:
-            raise ValueError("Vault file is malformed.")
-        return data
+    try:
+        if args.command == "init":
+            storage.initialize(args.password)
+            print(f"Vault initialized at {args.vault_file}")
 
-    def init(self) -> dict:
-        salt = generate_salt()
-        data = {"salt": salt.decode("utf-8"), "entries": {}}
-        self.vault_file.parent.mkdir(parents=True, exist_ok=True)
-        with self.vault_file.open("w", encoding="utf-8") as handle:
-            import json
+        elif args.command == "add":
+            if not args.name or not args.secret:
+                parser.error("--name and --secret are required for add")
+            storage.add_entry(args.password, args.name, args.secret, args.note)
+            print(f"Added secret '{args.name}'")
 
-            json.dump(data, handle, indent=2)
-        return data
+        elif args.command == "get":
+            if not args.name:
+                parser.error("--name is required for get")
+            entry = storage.get_entry(args.password, args.name)
+            print(f"Name: {entry['name']}")
+            print(f"Secret: {entry['value']}")
+            if entry.get("note"):
+                print(f"Note: {entry['note']}")
 
-    def add(self, name: str, secret: str, note: str = "") -> dict:
-        vault = self._ensure_initialized()
-        salt = vault["salt"].encode("utf-8")
-        encrypted = encrypt_secret(secret, self.password, salt)
-        vault["entries"][name] = {"value": encrypted, "note": note}
-        with self.vault_file.open("w", encoding="utf-8") as handle:
-            import json
+        elif args.command == "list":
+            entries = storage.list_entries(args.password)
+            if not entries:
+                print("No entries found.")
+            else:
+                for entry in entries:
+                    print(f"- {entry['name']}: {entry['value']}")
+                    if entry.get("note"):
+                        print(f"  Note: {entry['note']}")
 
-            json.dump(vault, handle, indent=2)
-        return vault["entries"][name]
+        elif args.command == "delete":
+            if not args.name:
+                parser.error("--name is required for delete")
+            storage.delete_entry(args.name)
+            print(f"Deleted secret '{args.name}'")
 
-    def get(self, name: str) -> dict:
-        vault = self._ensure_initialized()
-        entry = vault["entries"].get(name)
-        if entry is None:
-            raise KeyError(f"Entry '{name}' does not exist.")
-        salt = vault["salt"].encode("utf-8")
-        return {
-            "name": name,
-            "value": decrypt_secret(entry["value"], self.password, salt),
-            "note": entry.get("note", ""),
-        }
+    except (FileNotFoundError, KeyError, ValueError) as exc:
+        print(f"Error: {exc}", file=sys.stderr)
+        return 1
 
-    def list(self) -> list[dict]:
-        vault = self._ensure_initialized()
-        salt = vault["salt"].encode("utf-8")
-        items = []
-        for name in sorted(vault["entries"].keys()):
-            entry = vault["entries"][name]
-            items.append(
-                {
-                    "name": name,
-                    "value": decrypt_secret(entry["value"], self.password, salt),
-                    "note": entry.get("note", ""),
-                }
-            )
-        return items
+    return 0
 
-    def delete(self, name: str) -> dict:
-        vault = self._ensure_initialized()
-        if name not in vault["entries"]:
-            raise KeyError(f"Entry '{name}' does not exist.")
 
-        deleted = vault["entries"].pop(name)
-        with self.vault_file.open("w", encoding="utf-8") as handle:
-            import json
-
-            json.dump(vault, handle, indent=2)
-        return deleted
+if __name__ == "__main__":
+    raise SystemExit(main())
